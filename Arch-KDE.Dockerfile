@@ -22,24 +22,16 @@ RUN sed -i '/^#ParallelDownloads/s/^#//' /etc/pacman.conf && \
     pacman -Sy --noconfirm archlinux-keyring glibc && \
     pacman -Su --noconfirm && \
     pacman -S --noconfirm --needed \
-    # 核心工具组件 
     bash jq dialog coreutils file findutils grep sed gawk curl wget ca-certificates bash-completion dbus systemd fastfetch logrotate \
-    # 用户请求的基础开发/编辑工具
     git nano sudo \
-    # 网络与 SSH 工具
     openssh net-tools iptables iputils iproute2 bind \
-    # 用于系统监控的 procps 进程工具
     procps-ng \
-    # 核心内核模块支持
     kmod tzdata && \
-    ############################################## KDE支持 ################################################
-    # 最小化KDE
     if [ "$BUILD_KDE" = "min" ]; then \
         pacman -S --noconfirm --needed \
         xorg-xrandr noto-fonts-cjk noto-fonts-emoji plasma-desktop pipewire pipewire-pulse wireplumber powerdevil kscreen plasma-pa ark kwin kwin-x11 upower konsole \
         dolphin kate kinfocenter mesa-utils libpulse vulkan-tools; \
     fi && \
-    # 精简KDE
     if [ "$BUILD_KDE" = "conc" ]; then \
         pacman -S --noconfirm --needed \
         xorg-xrandr noto-fonts-cjk noto-fonts-emoji plasma-desktop pipewire pipewire-pulse wireplumber powerdevil kscreen plasma-pa ark kwin kwin-x11 upower konsole \
@@ -47,35 +39,28 @@ RUN sed -i '/^#ParallelDownloads/s/^#//' /etc/pacman.conf && \
         kfind plasma-systemmonitor filelight glmark2 vkmark systemsettings kscreenlocker kio-extras xdg-user-dirs dolphin-plugins ffmpegthumbs kdegraphics-thumbnailers \
         kimageformats plasma-browser-integration libcanberra gstreamer gst-plugins-base gst-plugins-good sound-theme-freedesktop chromium; \
     fi && \
-    # Arch 强制安装，但是这玩意不开硬件访问会导致桌面闪退
     if [ "$BUILD_KDE" = "conc" ] || [ "$BUILD_KDE" = "min" ] ; then \
         mv /usr/lib/xdg-desktop-portal /usr/lib/xdg-desktop-portal.bak && \
         mv /usr/lib/xdg-desktop-portal-kde /usr/lib/xdg-desktop-portal-kde.bak; \
     fi && \
-    ######################################################################################################
-    #输入法 fcitx5 (可选)
     if [ "$ENABLE_srf_ARG" = "true" ]; then \
         pacman -S --noconfirm --needed fcitx5-im; \
     fi && \
     if [ "$ENABLE_srf_ARG" = "true" ] && [ "$ENABLE_zh_tz_ARG" = "true" ]; then \
         pacman -S --noconfirm --needed fcitx5-chinese-addons; \
     fi && \
-    ## 开发工具集成 (可选)
     if [ "$ENABLE_kfgj_ARG" = "true" ]; then \
         pacman -S --noconfirm --needed \
         base-devel cmake clang llvm python python-pip; \
     fi && \
-    ## 压缩工具扩展 (可选)
     if [ "$ENABLE_zip_ARG" = "true" ]; then \
         pacman -S --noconfirm --needed \
         zip unzip p7zip bzip2 xz tar gzip; \
     fi && \
-    ## docker (可选)
     if [ "$ENABLE_docker_ARG" = "true" ]; then \
         pacman -S --noconfirm --needed \
         docker docker-compose; \
     fi && \
-    ## 集成tmoe (可选)
     if [ "$ENABLE_tmoe_ARG" = "true" ]; then \
         git clone --depth=1 https://github.com/2moe/tmoe-linux.git /usr/local/etc/tmoe-linux/git && \
         ln -sf /usr/local/etc/tmoe-linux/git/debian.sh /usr/local/bin/tmoe && \
@@ -95,18 +80,16 @@ RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen && \
         echo "LANG=en_US.UTF-8" > /etc/locale.conf && \
         echo "LC_ALL=en_US.UTF-8" >> /etc/locale.conf; \
     fi && \
-    # 配置 SSH 服务（禁用 root 密码登录，但允许常规密码认证）
     mkdir -p /var/run/sshd && \
     ssh-keygen -A && \
     sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/sshd_config && \
     sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
-    # 如果容器内存在默认的 alarm 或 arch 用户，则清理
     userdel -r alarm 2>/dev/null || true && \
-    useradd -m -s /bin/bash Gold && echo "Gold:1234" | chpasswd && \
+    useradd -m -s /bin/bash yebu && echo "yebu:1234" | chpasswd && \
     systemctl enable sshd
 
 
-# 添加环境变量 (注意每个变量前都加了 export)
+# 添加环境变量
 RUN cat <<'EOF' > /etc/profile.d/custom_env.sh
 export MESA_LOADER_DRIVER_OVERRIDE=kgsl
 export TU_DEBUG=noconform
@@ -125,13 +108,14 @@ RUN if [ "$PulseAudio" = "socket" ]; then \
     elif [ "$PulseAudio" = "tcp" ]; then \
         echo 'export PULSE_SERVER="tcp:127.0.0.1:4713"' >> /etc/profile.d/custom_env.sh; \
     fi
+
 RUN chmod +x /etc/profile.d/custom_env.sh
 
 # 输入法与 KDE 开机自启动配置
 RUN <<'EOF_RUN'
-    if [ "$ENABLE_srf_ARG" = "true" ]; then
-    mkdir -p /home/Gold/.config/autostart
-    cat <<'EOF' > /home/Gold/.config/autostart/fcitx5.desktop
+if [ "$ENABLE_srf_ARG" = "true" ]; then
+    mkdir -p /home/yebu/.config/autostart
+    cat <<'EOF' > /home/yebu/.config/autostart/fcitx5.desktop
 [Desktop Entry]
 Name=Fcitx5
 GenericName=Input Method
@@ -145,25 +129,29 @@ StartupNotify=false
 NoDisplay=true
 EOF
 fi
-    echo 'export XDG_RUNTIME_DIR=/run/user/$(id -u)' >> /home/Gold/.bashrc
-    if [ "$BUILD_KDE" = "min" ] || [ "$BUILD_KDE" = "conc" ] ; then
-    mkdir -p /home/Gold/.config 
-    cat <<'EOF' > /home/Gold/.config/kwinrc
+
+echo 'export XDG_RUNTIME_DIR=/run/user/$(id -u)' >> /home/yebu/.bashrc
+
+if [ "$BUILD_KDE" = "min" ] || [ "$BUILD_KDE" = "conc" ] ; then
+    mkdir -p /home/yebu/.config 
+    cat <<'EOF' > /home/yebu/.config/kwinrc
 [Compositing]
 Enabled=false
 EOF
-    fi
-    chown -R Gold:Gold /home/Gold
-    if [ "$BUILD_KDE" = "conc" ] || [ "$BUILD_KDE" = "min" ] ; then
+fi
+
+chown -R yebu:yebu /home/yebu
+
+if [ "$BUILD_KDE" = "conc" ] || [ "$BUILD_KDE" = "min" ] ; then
     cat <<'EOF' > /usr/local/bin/startplasma-x11
 #!/bin/bash
 exec dbus-run-session /usr/bin/startplasma-x11 "$@"
 EOF
     chmod +x /usr/local/bin/startplasma-x11
-    fi
+fi
 EOF_RUN
 
-# 下载并安装 Mesa (已集成 SigLevel 绕过修复)
+# 下载并安装 Mesa
 RUN if [ "$ENABLE_mesa_ARG" = "true" ]; then \
         echo "--> [开启] 正在下载并安装最新版 Mesa 驱动..." && \
         URL=$(curl -s https://api.github.com/repos/lfdevs/mesa-for-android-container/releases/latest | \
@@ -195,28 +183,24 @@ UseDomains=yes
 RouteMetric=100
 EOF
 
-# 应用 Android 运行环境兼容性修复（重点针对 Systemd 和 Udev）
+# 应用 Android 运行环境兼容性修复
 RUN <<'EOF_RUN'
 # --- 1. 常规兼容性修复 ---
-# 建立 Android 网络权限组
-grep -q '^aid_inet:' /etc/group     || echo 'aid_inet:x:3003:'    >> /etc/group
+grep -q '^aid_inet:' /etc/group || echo 'aid_inet:x:3003:' >> /etc/group
 grep -q '^aid_net_raw:' /etc/group || echo 'aid_net_raw:x:3004:' >> /etc/group
 grep -q '^aid_net_admin:' /etc/group || echo 'aid_net_admin:x:3005:' >> /etc/group
 
-# 检查并创建 droidspaces-gpu 组
 getent group droidspaces-gpu >/dev/null || groupadd -g 786 -r droidspaces-gpu
-# 为 root 用户赋予访问 Android 硬件及网络的权限组
-usermod -a -G aid_inet,aid_net_raw,input,video,tty,droidspaces-gpu root || true
-usermod -a -G aid_inet,aid_net_raw,input,video,tty,wheel,droidspaces-gpu Gold || true
 
-# 确保 Arch 赋予 sudo 权限给 wheel 组
+usermod -a -G aid_inet,aid_net_raw,input,video,tty,droidspaces-gpu root || true
+usermod -a -G aid_inet,aid_net_raw,input,video,tty,wheel,droidspaces-gpu yebu || true
+
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
 
 # --- 2. 针对 Systemd 的特定修复 ---
 ln -sf /dev/null /etc/systemd/system/systemd-networkd-wait-online.service
 ln -sf /dev/null /etc/systemd/system/systemd-journald-audit.socket
 
-# 优化 Journald 日志配置
 cat >> /etc/systemd/journald.conf << 'EOT'
 [Journal]
 ReadKMsg=no
@@ -234,7 +218,7 @@ MaxLevelStore=info
 EOT
 
 mkdir -p /etc/systemd/system/multi-user.target.wants
-# Arch Linux 的 systemd 库路径是 /usr/lib 而不是 /lib
+
 GUEST_SYSTEMD_PATH="/usr/lib/systemd/system"
 
 if [ -f "$GUEST_SYSTEMD_PATH/dbus.service" ]; then
@@ -253,7 +237,6 @@ else
     done
 fi
 
-# 在 systemd-logind 中禁用电源键行为处理
 mkdir -p /etc/systemd/logind.conf.d
 cat > /etc/systemd/logind.conf.d/99-power-key.conf << 'EOF'
 [Login]
@@ -264,7 +247,6 @@ HandlePowerKeyLongPress=ignore
 HandlePowerKeyLongPressHibernate=ignore
 EOF
 
-# 应用 udev 覆盖配置
 mkdir -p /etc/systemd/system/systemd-udev-trigger.service.d
 cat > /etc/systemd/system/systemd-udev-trigger.service.d/override.conf << 'EOF'
 [Service]
@@ -272,13 +254,11 @@ ExecStart=
 ExecStart=-/usr/bin/udevadm trigger --subsystem-match=usb --subsystem-match=block --subsystem-match=input --subsystem-match=tty --subsystem-match=net
 EOF
 
-# 针对只读文件系统路径覆盖
 for unit in systemd-udevd.service systemd-udev-trigger.service systemd-udev-settle.service systemd-udevd-kernel.socket systemd-udevd-control.socket; do
     mkdir -p "/etc/systemd/system/${unit}.d"
     printf "[Unit]\nConditionPathIsReadWrite=\n" > "/etc/systemd/system/${unit}.d/99-readonly-fix.conf"
 done
 
-# 限制特定的网络服务
 for unit in NetworkManager.service dhcpcd.service systemd-resolved.service systemd-networkd.service; do
     if [ -f "$GUEST_SYSTEMD_PATH/$unit" ] || [ -f "/etc/systemd/system/multi-user.target.wants/$unit" ]; then
         mkdir -p "/etc/systemd/system/${unit}.d"
@@ -290,7 +270,6 @@ EOF
     fi
 done
 
-# 仅在启用硬件访问时限制 udev 服务启动
 for unit in systemd-udevd.service systemd-udev-trigger.service systemd-udev-settle.service; do
     if [ -f "$GUEST_SYSTEMD_PATH/$unit" ] || [ -f "/etc/systemd/system/multi-user.target.wants/$unit" ]; then
         mkdir -p "/etc/systemd/system/${unit}.d"
@@ -302,7 +281,6 @@ EOF
     fi
 done
 
-# 针对 Android 环境微调日志轮转
 if [ -f /etc/logrotate.conf ]; then
     sed -i 's/^#maxsize.*/maxsize 50M/' /etc/logrotate.conf
     if ! grep -q "maxsize 50M" /etc/logrotate.conf; then
@@ -335,6 +313,7 @@ RUN if [ "$ENABLE_binfmt_ARG" = "true" ]; then \
 
 # 彻底清理 pacman 缓存
 RUN rm -rf /var/cache/pacman/pkg/* /var/lib/pacman/sync/*
-# 阶段 2：将完整的根文件系统导出到 scratch（空白层），以便外部直接提取或打包成 tarfs
+
+# 阶段 2：将完整的根文件系统导出到 scratch
 FROM scratch AS export
 COPY --from=customizer / /
